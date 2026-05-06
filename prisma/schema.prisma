@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Cliente {
+  id          String       @id @default(cuid())
+  dni         String       @unique
+  nombre      String
+  telefono    String
+  expedientes Expediente[]
+  createdAt   DateTime     @default(now())
+}
+
+model Expediente {
+  id             String     @id @default(cuid())
+  numero         String     @unique
+  caratula       String
+  estado         String
+  estadoDetalle  String?
+  pendientes     String?
+  proxMovimiento String?
+  fuero          String?
+  juzgado        String?
+  clienteId      String
+  cliente        Cliente    @relation(fields: [clienteId], references: [id])
+  reminders      Reminder[]
+  updatedAt      DateTime   @updatedAt
+}
+
+model Reminder {
+  id           String     @id @default(cuid())
+  expedienteId String
+  expediente   Expediente @relation(fields: [expedienteId], references: [id])
+  tipo         String
+  mensaje      String
+  fechaEvento  DateTime
+  enviarEn     DateTime
+  status       String     @default("pending")
+  templateName String
+  sentAt       DateTime?
+  errorMsg     String?
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  telefono    String   @unique
+  state       String   @default("idle")
+  contextData Json?
+  lastMsgAt   DateTime @default(now())
+  expiresAt   DateTime
+}
+
+model FAQ {
+  id        String @id @default(cuid())
+  trigger   String
+  pregunta  String
+  respuesta String
+  orden     Int
+}

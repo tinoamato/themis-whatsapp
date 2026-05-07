@@ -27,6 +27,11 @@ export class RemindersController {
     return this.svc.findAll();
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.svc.findOne(id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   remove(@Param('id') id: string) {

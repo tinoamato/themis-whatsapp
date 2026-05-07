@@ -1,4 +1,14 @@
-import { IsString, IsNotEmpty, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsDateString,
+  IsArray,
+  ArrayNotEmpty,
+  IsInt,
+  Min,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
 
 export class CreateReminderDto {
   @IsString()
@@ -7,19 +17,34 @@ export class CreateReminderDto {
 
   @IsString()
   @IsNotEmpty()
-  tipo: string;
-
-  @IsString()
-  @IsNotEmpty()
-  mensaje: string;
+  tipo: string; // AUDIENCIA | VENCIMIENTO | GENERAL
 
   @IsDateString()
   fechaEvento: string;
 
-  @IsDateString()
-  enviarEn: string;
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  intervalos: number[]; // días de anticipación, e.g. [7, 3, 1]
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  templateName: string;
+  mensaje?: string;
+
+  @IsOptional()
+  @IsString()
+  lugar?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  esVirtual?: boolean;
+
+  @IsOptional()
+  @IsString()
+  linkVirtual?: string;
+
+  @IsOptional()
+  @IsString()
+  queLlevar?: string;
 }

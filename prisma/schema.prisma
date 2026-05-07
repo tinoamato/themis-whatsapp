@@ -62,21 +62,30 @@ model ExpedienteEtapa {
 // ── Reminders ────────────────────────────────────────────────────────────────
 
 model Reminder {
-  id           String     @id @default(cuid())
+  id           String           @id @default(cuid())
   expedienteId String
-  expediente   Expediente @relation(fields: [expedienteId], references: [id])
-  tipo         String
-  mensaje      String     @db.Text
+  expediente   Expediente       @relation(fields: [expedienteId], references: [id])
+  tipo         String           // AUDIENCIA | VENCIMIENTO | GENERAL
   fechaEvento  DateTime
-  enviarEn     DateTime
-  status       String     @default("pending")
-  templateName String
-  sentAt       DateTime?
-  errorMsg     String?
+  intervalos   Int[]            // días de anticipación, e.g. [7, 3, 1]
+  mensaje      String?          @db.Text
   lugar        String?
-  esVirtual    Boolean    @default(false)
+  esVirtual    Boolean          @default(false)
   linkVirtual  String?
-  requeridos   String?
+  queLlevar    String?
+  createdAt    DateTime         @default(now())
+  alertas      ReminderAlerta[]
+}
+
+model ReminderAlerta {
+  id         String    @id @default(cuid())
+  reminderId String
+  reminder   Reminder  @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  diasAntes  Int
+  enviarEn   DateTime
+  status     String    @default("pending")
+  sentAt     DateTime?
+  errorMsg   String?
 }
 
 // ── Conversaciones ───────────────────────────────────────────────────────────

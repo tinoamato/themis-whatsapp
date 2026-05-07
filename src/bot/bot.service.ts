@@ -351,10 +351,10 @@ export class BotService {
       `${tema.emoji ?? '❓'} *${tema.titulo}*\n\nElegí tu pregunta:`,
       [
         {
-          rows: tema.preguntas.map((p) => ({
+          rows: tema.preguntas.map((p, i) => ({
             id: `faq_${p.id}`,
-            title: p.pregunta.slice(0, 24),
-            description: p.pregunta.length > 24 ? p.pregunta.slice(0, 72) : undefined,
+            title: `${i + 1}. ${p.pregunta.slice(0, 20)}`.slice(0, 24),
+            description: p.pregunta.slice(0, 72),
           })),
         },
       ],

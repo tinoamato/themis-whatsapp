@@ -11,6 +11,22 @@ import { UpdateClienteDto } from './dto/update-cliente.dto';
 export class ClientesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findAll() {
+    return this.prisma.cliente.findMany({
+      orderBy: { nombre: 'asc' },
+      include: { expedientes: { select: { id: true, numero: true, caratula: true } } },
+    });
+  }
+
+  async findByDni(dni: string) {
+    const cliente = await this.prisma.cliente.findUnique({
+      where: { dni },
+      include: { expedientes: { select: { id: true, numero: true, caratula: true } } },
+    });
+    if (!cliente) throw new NotFoundException(`Cliente con DNI ${dni} no encontrado`);
+    return cliente;
+  }
+
   async create(dto: CreateClienteDto) {
     const existing = await this.prisma.cliente.findUnique({
       where: { dni: dto.dni },

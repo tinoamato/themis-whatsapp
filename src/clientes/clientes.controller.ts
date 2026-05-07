@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Put,
+  Get,
   Delete,
   Param,
   Body,
@@ -17,6 +18,16 @@ import { ApiKeyGuard } from '../common/guards/api-key.guard';
 @UseGuards(ApiKeyGuard)
 export class ClientesController {
   constructor(private readonly svc: ClientesService) {}
+
+  @Get()
+  findAll() {
+    return this.svc.findAll();
+  }
+
+  @Get('dni/:dni')
+  findByDni(@Param('dni') dni: string) {
+    return this.svc.findByDni(dni);
+  }
 
   @Post()
   create(@Body() dto: CreateClienteDto) {

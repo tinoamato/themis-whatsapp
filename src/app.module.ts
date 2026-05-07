@@ -10,9 +10,10 @@ import { ExpedientesModule } from './expedientes/expedientes.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { FaqModule } from './faq/faq.module';
 import { EtapasModule } from './etapas/etapas.module';
+import { AppController } from './app.controller';
 
 @Module({
-  controllers: [],
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),

@@ -3,22 +3,15 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetaService } from '../meta/meta.service';
 
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 type ConvState =
   | 'idle'
   | 'awaiting_menu'
   | 'awaiting_dni'
   | 'selecting_expediente'
-  | 'awaiting_faq';
-
-interface ExpedienteCtx {
-  ids: string[];
-}
-
-interface FaqCtx {
-  ids: string[];
-}
+  | 'awaiting_faq_tema'
+  | 'awaiting_faq_pregunta';
 
 @Injectable()
 export class BotService {
@@ -29,21 +22,19 @@ export class BotService {
     private readonly meta: MetaService,
   ) {}
 
-  async handleMessage(from: string, body: string): Promise<void> {
+  async handleMessage(from: string, body: string, interactiveId = ''): Promise<void> {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_TIMEOUT_MS);
     const text = body.trim();
+    const id = interactiveId.trim();
 
-    let conv = await this.prisma.conversation.findUnique({
-      where: { telefono: from },
-    });
+    let conv = await this.prisma.conversation.findUnique({ where: { telefono: from } });
 
     if (!conv) {
       conv = await this.prisma.conversation.create({
         data: { telefono: from, state: 'idle', expiresAt },
       });
     } else if (conv.state !== 'idle' && conv.expiresAt < now) {
-      this.logger.log(`Conversación expirada para ${from}, reseteando`);
       conv = await this.prisma.conversation.update({
         where: { telefono: from },
         data: { state: 'idle', contextData: Prisma.DbNull, lastMsgAt: now, expiresAt },
@@ -56,7 +47,7 @@ export class BotService {
     }
 
     const state = conv.state as ConvState;
-    this.logger.log(`[${from}] state=${state} msg="${text}"`);
+    this.logger.log(`[${from}] state=${state} msg="${text}" id="${id}"`);
 
     switch (state) {
       case 'idle':
@@ -65,7 +56,7 @@ export class BotService {
         break;
 
       case 'awaiting_menu':
-        await this.handleMenuChoice(from, text, expiresAt);
+        await this.handleMenuChoice(from, text, id, expiresAt);
         break;
 
       case 'awaiting_dni':
@@ -73,21 +64,15 @@ export class BotService {
         break;
 
       case 'selecting_expediente':
-        await this.handleExpedienteSelection(
-          from,
-          text,
-          conv.contextData as unknown as ExpedienteCtx,
-          expiresAt,
-        );
+        await this.handleExpedienteSelection(from, id || text, conv.contextData as any, expiresAt);
         break;
 
-      case 'awaiting_faq':
-        await this.handleFaqSelection(
-          from,
-          text,
-          conv.contextData as unknown as FaqCtx,
-          expiresAt,
-        );
+      case 'awaiting_faq_tema':
+        await this.handleFaqTema(from, id || text, expiresAt);
+        break;
+
+      case 'awaiting_faq_pregunta':
+        await this.handleFaqPregunta(from, id || text, conv.contextData as any, expiresAt);
         break;
 
       default:
@@ -99,94 +84,82 @@ export class BotService {
   // ── Menú principal ──────────────────────────────────────────────────────────
 
   private async sendMainMenu(to: string): Promise<void> {
-    await this.meta.sendText(
+    await this.meta.sendList(
       to,
-      '👋 ¡Hola! Soy el asistente virtual de tu estudio jurídico.\n\n' +
-        '¿En qué puedo ayudarte?\n\n' +
-        '1️⃣  Consultar mi expediente\n' +
-        '2️⃣  Preguntas frecuentes\n' +
-        '3️⃣  Hablar con un asesor\n\n' +
-        'Respondé con el número de la opción.',
+      '👋 ¡Hola! Soy el asistente virtual de tu estudio jurídico.\n\n¿En qué puedo ayudarte hoy?',
+      [
+        {
+          rows: [
+            { id: 'menu_1', title: '📂 Mi expediente', description: 'Consultá el estado de tu caso' },
+            { id: 'menu_2', title: '❓ Preguntas frecuentes', description: 'Dudas sobre el proceso' },
+            { id: 'menu_3', title: '💬 Hablar con asesor', description: 'Contacto con tu abogado' },
+          ],
+        },
+      ],
+      'Ver opciones',
+      '⚖️ Estudio Jurídico',
     );
   }
 
   private async handleMenuChoice(
     from: string,
     text: string,
+    id: string,
     expiresAt: Date,
   ): Promise<void> {
-    switch (text) {
-      case '1':
-        await this.meta.sendText(
-          from,
-          '🔍 Por favor, ingresá tu *DNI* (solo números):',
-        );
-        await this.setState(from, 'awaiting_dni', null);
-        break;
+    const choice = id || text;
 
-      case '2':
-        await this.showFaqList(from, expiresAt);
-        break;
-
-      case '3':
-        await this.meta.sendText(
-          from,
-          '✅ Perfecto. Un asesor va a comunicarse con vos a la brevedad. ¡Muchas gracias!',
-        );
-        await this.setState(from, 'idle', null);
-        break;
-
-      default:
-        await this.meta.sendText(
-          from,
-          '❓ Opción no válida. Por favor elegí *1*, *2* o *3*:',
-        );
-        await this.sendMainMenu(from);
-        await this.setState(from, 'awaiting_menu', null);
+    if (choice === 'menu_1' || choice === '1') {
+      await this.meta.sendText(from, '🔍 Por favor, ingresá tu *DNI* (solo números):');
+      await this.setState(from, 'awaiting_dni', null);
+    } else if (choice === 'menu_2' || choice === '2') {
+      await this.showFaqTemas(from, expiresAt);
+    } else if (choice === 'menu_3' || choice === '3') {
+      await this.meta.sendText(
+        from,
+        '✅ *Perfecto.* Un asesor va a comunicarse con vos a la brevedad.\n\n¡Muchas gracias por contactarnos!',
+      );
+      await this.setState(from, 'idle', null);
+    } else {
+      await this.sendMainMenu(from);
     }
   }
 
   // ── Consulta de expediente ───────────────────────────────────────────────────
 
-  private async handleDni(
-    from: string,
-    text: string,
-    expiresAt: Date,
-  ): Promise<void> {
+  private async handleDni(from: string, text: string, expiresAt: Date): Promise<void> {
     const dni = text.replace(/\D/g, '');
 
     if (!dni) {
-      await this.meta.sendText(
-        from,
-        '⚠️ El DNI debe contener solo números. Intentá de nuevo:',
-      );
+      await this.meta.sendText(from, '⚠️ El DNI debe contener solo números. Intentá de nuevo:');
       return;
     }
 
     const cliente = await this.prisma.cliente.findUnique({
       where: { dni },
-      include: { expedientes: true },
+      include: {
+        expedientes: {
+          include: { etapa: { include: { etapa: true } } },
+        },
+      },
     });
 
     if (!cliente) {
       await this.meta.sendText(
         from,
-        `❌ No encontramos ningún cliente con el DNI *${dni}*.\n\n` +
-          'Verificá el número o contactá a tu estudio jurídico.',
+        `❌ No encontramos ningún cliente con el DNI *${dni}*.\n\nVerificá el número o contactá a tu estudio jurídico.`,
       );
       await this.sendMainMenu(from);
       await this.setState(from, 'awaiting_menu', null);
       return;
     }
 
-    // Validar que el teléfono coincida con el número de WhatsApp
     const telefonoNorm = cliente.telefono.replace(/\D/g, '');
     const fromNorm = from.replace(/\D/g, '');
     if (!fromNorm.endsWith(telefonoNorm) && !telefonoNorm.endsWith(fromNorm)) {
       await this.meta.sendText(
         from,
-        '🔒 El número de WhatsApp no coincide con el registrado para ese DNI. ' +
-          'Por favor comunicate con tu estudio jurídico.',
+        '🔒 El número de WhatsApp no coincide con el registrado para ese DNI.\n\nComunicate con tu estudio jurídico.',
       );
       await this.sendMainMenu(from);
       await this.setState(from, 'awaiting_menu', null);
@@ -207,22 +180,25 @@ export class BotService {
 
     if (expedientes.length === 1) {
       await this.meta.sendText(from, this.formatExpediente(expedientes[0]));
-      await this.meta.sendText(
-        from,
-        '¿Puedo ayudarte con algo más?\n\n1️⃣  Menú principal',
-      );
+      await this.sendPostExpedienteButtons(from);
       await this.setState(from, 'idle', null);
       return;
     }
 
-    // Múltiples expedientes
-    let lista = `📂 Hola *${cliente.nombre}*, tenés *${expedientes.length}* expedientes:\n\n`;
-    expedientes.forEach((exp, i) => {
-      lista += `${i + 1}️⃣  *${exp.numero}* - ${exp.caratula}\n`;
-    });
-    lista += '\nIngresá el *número* del expediente que querés consultar:';
-
-    await this.meta.sendText(from, lista);
+    await this.meta.sendList(
+      from,
+      `📂 Hola *${cliente.nombre}*, tenés *${expedientes.length}* expedientes. ¿Cuál querés consultar?`,
+      [
+        {
+          rows: expedientes.map((exp) => ({
+            id: `exp_${exp.id}`,
+            title: exp.numero.slice(0, 24),
+            description: exp.caratula.slice(0, 72),
+          })),
+        },
+      ],
+      'Ver expedientes',
+    );
     await this.setState(from, 'selecting_expediente', {
       ids: expedientes.map((e) => e.id),
     });
@@ -230,22 +206,27 @@ export class BotService {
 
   private async handleExpedienteSelection(
     from: string,
-    text: string,
-    ctx: ExpedienteCtx,
+    choice: string,
+    ctx: any,
     _expiresAt: Date,
   ): Promise<void> {
-    const idx = parseInt(text, 10) - 1;
+    let expId: string | undefined;
 
-    if (!ctx?.ids || isNaN(idx) || idx < 0 || idx >= ctx.ids.length) {
-      await this.meta.sendText(
-        from,
-        `⚠️ Opción inválida. Ingresá un número entre *1* y *${ctx?.ids?.length ?? '?'}*:`,
-      );
+    if (choice.startsWith('exp_')) {
+      expId = choice.replace('exp_', '');
+    } else {
+      const idx = parseInt(choice, 10) - 1;
+      expId = ctx?.ids?.[idx];
+    }
+
+    if (!expId) {
+      await this.meta.sendText(from, '⚠️ Opción inválida. Por favor seleccioná un expediente de la lista.');
       return;
     }
 
     const expediente = await this.prisma.expediente.findUnique({
-      where: { id: ctx.ids[idx] },
+      where: { id: expId },
+      include: { etapa: { include: { etapa: true } } },
     });
 
     if (!expediente) {
@@ -256,10 +237,7 @@ export class BotService {
     }
 
     await this.meta.sendText(from, this.formatExpediente(expediente));
-    await this.meta.sendText(
-      from,
-      '¿Puedo ayudarte con algo más?\n\n1️⃣  Menú principal',
-    );
+    await this.sendPostExpedienteButtons(from);
     await this.setState(from, 'idle', null);
   }
 
@@ -268,97 +246,187 @@ export class BotService {
       ? new Date(exp.updatedAt).toLocaleDateString('es-AR')
       : '-';
 
+    // Use stage message if assigned
+    const expEtapa = exp.etapa;
+    if (expEtapa) {
+      const mensajeBot =
+        expEtapa.mensajeBotCustom ?? expEtapa.etapa?.mensajeBot ?? null;
+      const proximoPaso =
+        expEtapa.proximoPasoCustom ?? expEtapa.etapa?.proximoPaso ?? null;
+      const esperando =
+        expEtapa.esperandoCustom ?? expEtapa.etapa?.esperando ?? null;
+
+      let msg = `📋 *Expediente Nro. ${exp.numero}*\n📝 ${exp.caratula}\n\n`;
+      if (mensajeBot) msg += `${mensajeBot}\n\n`;
+      if (proximoPaso) msg += `➡️ *Próximo paso:* ${proximoPaso}\n`;
+      if (esperando) msg += `⏳ *Esperando:* ${esperando}\n`;
+      if (exp.fuero) msg += `\n🏛️ *Fuero:* ${exp.fuero}`;
+      if (exp.juzgado) msg += `\n🏢 *Juzgado:* ${exp.juzgado}`;
+      msg += `\n🔄 *Actualizado:* ${fecha}`;
+      return msg;
+    }
+
+    // Fallback to raw fields
     let msg = `📋 *Expediente Nro. ${exp.numero}*\n\n`;
     msg += `📝 *Carátula:* ${exp.caratula}\n`;
     msg += `⚖️ *Estado:* ${exp.estado}\n`;
     if (exp.estadoDetalle) msg += `📌 *Detalle:* ${exp.estadoDetalle}\n`;
     if (exp.pendientes) msg += `⏳ *Pendientes:* ${exp.pendientes}\n`;
-    if (exp.proxMovimiento)
-      msg += `📅 *Próx. movimiento:* ${exp.proxMovimiento}\n`;
+    if (exp.proxMovimiento) msg += `📅 *Próx. movimiento:* ${exp.proxMovimiento}\n`;
     if (exp.fuero) msg += `🏛️ *Fuero:* ${exp.fuero}\n`;
     if (exp.juzgado) msg += `🏢 *Juzgado:* ${exp.juzgado}\n`;
     msg += `🔄 *Actualizado:* ${fecha}`;
     return msg;
   }
 
+  private async sendPostExpedienteButtons(to: string): Promise<void> {
+    await this.meta.sendButtons(
+      to,
+      '¿Puedo ayudarte con algo más?',
+      [
+        { id: 'back_menu', title: '🏠 Menú principal' },
+        { id: 'menu_2', title: '❓ Preguntas' },
+        { id: 'menu_3', title: '💬 Hablar con asesor' },
+      ],
+    );
+  }
+
   // ── FAQ ─────────────────────────────────────────────────────────────────────
 
-  private async showFaqList(from: string, _expiresAt: Date): Promise<void> {
-    const faqs = await this.prisma.fAQ.findMany({
+  private async showFaqTemas(from: string, _expiresAt: Date): Promise<void> {
+    const temas = await this.prisma.faqTema.findMany({
+      where: { activo: true },
       orderBy: { orden: 'asc' },
     });
 
-    if (faqs.length === 0) {
-      await this.meta.sendText(
-        from,
-        'ℹ️ No hay preguntas frecuentes disponibles por el momento.',
-      );
+    if (temas.length === 0) {
+      await this.meta.sendText(from, 'ℹ️ No hay preguntas frecuentes disponibles por el momento.');
       await this.sendMainMenu(from);
       await this.setState(from, 'awaiting_menu', null);
       return;
     }
 
-    let lista = '❓ *Preguntas frecuentes*\n\n';
-    faqs.forEach((faq, i) => {
-      lista += `${i + 1}️⃣  ${faq.pregunta}\n`;
-    });
-    lista += '\nIngresá el *número* de tu consulta:';
-
-    await this.meta.sendText(from, lista);
-    await this.setState(from, 'awaiting_faq', {
-      ids: faqs.map((f) => f.id),
-    });
+    await this.meta.sendList(
+      from,
+      '❓ *Preguntas frecuentes*\n\nElegí el tema sobre el que tenés dudas:',
+      [
+        {
+          rows: temas.map((t) => ({
+            id: `tema_${t.id}`,
+            title: `${t.emoji ?? ''} ${t.titulo}`.trim().slice(0, 24),
+          })),
+        },
+      ],
+      'Ver temas',
+      '❓ Preguntas frecuentes',
+    );
+    await this.setState(from, 'awaiting_faq_tema', null);
   }
 
-  private async handleFaqSelection(
-    from: string,
-    text: string,
-    ctx: FaqCtx,
-    expiresAt: Date,
-  ): Promise<void> {
-    const idx = parseInt(text, 10) - 1;
+  private async handleFaqTema(from: string, choice: string, expiresAt: Date): Promise<void> {
+    const temaId = choice.startsWith('tema_') ? choice.replace('tema_', '') : null;
 
-    if (!ctx?.ids || isNaN(idx) || idx < 0 || idx >= ctx.ids.length) {
-      await this.meta.sendText(
-        from,
-        `⚠️ Opción inválida. Ingresá un número entre *1* y *${ctx?.ids?.length ?? '?'}*:`,
-      );
+    if (!temaId) {
+      await this.showFaqTemas(from, expiresAt);
       return;
     }
 
-    const faq = await this.prisma.fAQ.findUnique({
-      where: { id: ctx.ids[idx] },
+    const tema = await this.prisma.faqTema.findUnique({
+      where: { id: temaId },
+      include: {
+        preguntas: {
+          where: { activa: true },
+          orderBy: { orden: 'asc' },
+        },
+      },
     });
 
-    if (!faq) {
-      await this.meta.sendText(from, '❌ No se encontró esa pregunta.');
-      await this.showFaqList(from, expiresAt);
+    if (!tema || tema.preguntas.length === 0) {
+      await this.showFaqTemas(from, expiresAt);
       return;
     }
 
-    await this.meta.sendText(
+    await this.meta.sendList(
       from,
-      `❓ *${faq.pregunta}*\n\n${faq.respuesta}`,
+      `${tema.emoji ?? '❓'} *${tema.titulo}*\n\nElegí tu pregunta:`,
+      [
+        {
+          rows: tema.preguntas.map((p) => ({
+            id: `faq_${p.id}`,
+            title: p.pregunta.slice(0, 24),
+            description: p.pregunta.length > 24 ? p.pregunta.slice(0, 72) : undefined,
+          })),
+        },
+      ],
+      'Ver preguntas',
     );
-    await this.meta.sendText(
+    await this.setState(from, 'awaiting_faq_pregunta', { temaId });
+  }
+
+  private async handleFaqPregunta(
+    from: string,
+    choice: string,
+    ctx: any,
+    expiresAt: Date,
+  ): Promise<void> {
+    // Handle navigation buttons
+    if (choice === 'back_menu' || choice === 'menu_1') {
+      await this.sendMainMenu(from);
+      await this.setState(from, 'awaiting_menu', null);
+      return;
+    }
+    if (choice === 'back_faqs') {
+      await this.showFaqTemas(from, expiresAt);
+      return;
+    }
+    if (choice.startsWith('tema_')) {
+      await this.handleFaqTema(from, choice, expiresAt);
+      return;
+    }
+
+    const preguntaId = choice.startsWith('faq_') ? choice.replace('faq_', '') : null;
+
+    if (!preguntaId) {
+      if (ctx?.temaId) {
+        await this.handleFaqTema(from, `tema_${ctx.temaId}`, expiresAt);
+      } else {
+        await this.showFaqTemas(from, expiresAt);
+      }
+      return;
+    }
+
+    const pregunta = await this.prisma.faqPregunta.findUnique({
+      where: { id: preguntaId },
+      include: { tema: true },
+    });
+
+    if (!pregunta) {
+      await this.showFaqTemas(from, expiresAt);
+      return;
+    }
+
+    await this.meta.sendText(from, `❓ *${pregunta.pregunta}*\n\n${pregunta.respuesta}`);
+
+    await this.meta.sendButtons(
       from,
-      '¿Puedo ayudarte con algo más?\n\n1️⃣  Menú principal\n2️⃣  Ver otras preguntas',
+      '¿Puedo ayudarte con algo más?',
+      [
+        { id: 'back_menu', title: '🏠 Menú principal' },
+        { id: `tema_${pregunta.temaId}`, title: '↩️ Más preguntas' },
+        { id: 'menu_3', title: '💬 Hablar con asesor' },
+      ],
     );
-    await this.setState(from, 'idle', null);
+    await this.setState(from, 'awaiting_faq_pregunta', { temaId: pregunta.temaId });
   }
 
   // ── Utilidades ──────────────────────────────────────────────────────────────
 
-  private async setState(
-    from: string,
-    state: ConvState,
-    contextData: object | null,
-  ): Promise<void> {
+  private async setState(from: string, state: ConvState, contextData: object | null): Promise<void> {
     await this.prisma.conversation.update({
       where: { telefono: from },
       data: {
         state,
-        contextData: contextData === null ? undefined : contextData,
+        contextData: contextData === null ? Prisma.DbNull : contextData,
       },
     });
   }

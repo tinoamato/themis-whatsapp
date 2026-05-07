@@ -17,7 +17,6 @@ export class WebhookController {
 
   constructor(private readonly bot: BotService) {}
 
-  // ── GET /webhook — verificación de Meta ──────────────────────────────────────
   @Get()
   verify(
     @Query('hub.mode') mode: string,
@@ -34,7 +33,6 @@ export class WebhookController {
     }
   }
 
-  // ── POST /webhook — mensajes entrantes ──────────────────────────────────────
   @Post()
   @HttpCode(200)
   async receive(@Body() body: any): Promise<string> {
@@ -44,25 +42,33 @@ export class WebhookController {
       const value = change?.value;
       const messages = value?.messages;
 
-      if (!messages || messages.length === 0) {
-        return 'ok';
-      }
+      if (!messages || messages.length === 0) return 'ok';
 
       const message = messages[0];
+      const from: string = message.from;
 
-      // Solo procesamos mensajes de texto
-      if (message.type !== 'text') {
-        this.logger.log(`Mensaje de tipo "${message.type}" ignorado`);
+      let text = '';
+      let interactiveId = '';
+
+      if (message.type === 'text') {
+        text = message.text?.body ?? '';
+        this.logger.log(`Mensaje de ${from}: "${text}"`);
+      } else if (message.type === 'interactive') {
+        const iType = message.interactive?.type;
+        if (iType === 'button_reply') {
+          interactiveId = message.interactive.button_reply.id ?? '';
+          text = message.interactive.button_reply.title ?? '';
+        } else if (iType === 'list_reply') {
+          interactiveId = message.interactive.list_reply.id ?? '';
+          text = message.interactive.list_reply.title ?? '';
+        }
+        this.logger.log(`Interactivo de ${from}: id="${interactiveId}" title="${text}"`);
+      } else {
+        this.logger.log(`Tipo "${message.type}" ignorado de ${from}`);
         return 'ok';
       }
 
-      const from: string = message.from;
-      const text: string = message.text?.body ?? '';
-
-      this.logger.log(`Mensaje de ${from}: "${text}"`);
-
-      // Procesamiento asincrónico — respondemos 200 a Meta de inmediato
-      this.bot.handleMessage(from, text).catch((err) => {
+      this.bot.handleMessage(from, text, interactiveId).catch((err) => {
         this.logger.error(`Error en handleMessage para ${from}:`, err);
       });
     } catch (err) {

@@ -16,8 +16,8 @@ model Cliente {
 }
 
 model Expediente {
-  id             String     @id @default(cuid())
-  numero         String     @unique
+  id             String           @id @default(cuid())
+  numero         String           @unique
   caratula       String
   estado         String
   estadoDetalle  String?
@@ -26,24 +26,60 @@ model Expediente {
   fuero          String?
   juzgado        String?
   clienteId      String
-  cliente        Cliente    @relation(fields: [clienteId], references: [id])
+  cliente        Cliente          @relation(fields: [clienteId], references: [id])
   reminders      Reminder[]
-  updatedAt      DateTime   @updatedAt
+  etapa          ExpedienteEtapa?
+  updatedAt      DateTime         @updatedAt
 }
+
+// ── Etapas predefinidas ──────────────────────────────────────────────────────
+
+model Etapa {
+  id          String            @id @default(cuid())
+  nombre      String
+  descripcion String?
+  mensajeBot  String            @db.Text
+  proximoPaso String
+  esperando   String
+  orden       Int               @default(0)
+  activa      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  expedientes ExpedienteEtapa[]
+}
+
+model ExpedienteEtapa {
+  id                String     @id @default(cuid())
+  expedienteId      String     @unique
+  expediente        Expediente @relation(fields: [expedienteId], references: [id])
+  etapaId           String?
+  etapa             Etapa?     @relation(fields: [etapaId], references: [id])
+  mensajeBotCustom  String?    @db.Text
+  proximoPasoCustom String?
+  esperandoCustom   String?
+  updatedAt         DateTime   @updatedAt
+}
+
+// ── Reminders ────────────────────────────────────────────────────────────────
 
 model Reminder {
   id           String     @id @default(cuid())
   expedienteId String
   expediente   Expediente @relation(fields: [expedienteId], references: [id])
   tipo         String
-  mensaje      String
+  mensaje      String     @db.Text
   fechaEvento  DateTime
   enviarEn     DateTime
   status       String     @default("pending")
   templateName String
   sentAt       DateTime?
   errorMsg     String?
+  lugar        String?
+  esVirtual    Boolean    @default(false)
+  linkVirtual  String?
+  requeridos   String?
 }
+
+// ── Conversaciones ───────────────────────────────────────────────────────────
 
 model Conversation {
   id          String   @id @default(cuid())
@@ -54,10 +90,23 @@ model Conversation {
   expiresAt   DateTime
 }
 
-model FAQ {
-  id        String @id @default(cuid())
-  trigger   String
+// ── FAQ en árbol ─────────────────────────────────────────────────────────────
+
+model FaqTema {
+  id        String        @id @default(cuid())
+  titulo    String
+  emoji     String?
+  orden     Int           @default(0)
+  activo    Boolean       @default(true)
+  preguntas FaqPregunta[]
+}
+
+model FaqPregunta {
+  id        String   @id @default(cuid())
+  temaId    String
+  tema      FaqTema  @relation(fields: [temaId], references: [id])
   pregunta  String
-  respuesta String
-  orden     Int
+  respuesta String   @db.Text
+  orden     Int      @default(0)
+  activa    Boolean  @default(true)
 }

@@ -9,6 +9,7 @@ import { ClientesModule } from './clientes/clientes.module';
 import { ExpedientesModule } from './expedientes/expedientes.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { FaqModule } from './faq/faq.module';
+import { EtapasModule } from './etapas/etapas.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { FaqModule } from './faq/faq.module';
     ExpedientesModule,
     RemindersModule,
     FaqModule,
+    EtapasModule,
   ],
 })
 export class AppModule {}

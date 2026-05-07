@@ -3,6 +3,17 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  // Skip if already seeded
+  const [etapaCount, temaCount] = await Promise.all([
+    prisma.etapa.count(),
+    prisma.faqTema.count(),
+  ]);
+
+  if (etapaCount > 0 && temaCount > 0) {
+    console.log('Seed ya aplicado, omitiendo.');
+    return;
+  }
+
   console.log('Seeding etapas predefinidas...');
 
   const etapas = [
@@ -106,20 +117,18 @@ async function main() {
     });
   }
 
-  // Upsert by nombre since we don't have a unique constraint on nombre
-  // Delete all and re-create for idempotency
-  await prisma.etapa.deleteMany();
-  for (const etapa of etapas) {
-    await prisma.etapa.create({ data: etapa });
+  if (etapaCount === 0) {
+    for (const etapa of etapas) {
+      await prisma.etapa.create({ data: etapa });
+    }
   }
 
   console.log(`✅ ${etapas.length} etapas creadas`);
 
   // ── FAQ tree ────────────────────────────────────────────────────────────────
 
+  if (temaCount > 0) return;
   console.log('Seeding FAQ...');
-  await prisma.faqPregunta.deleteMany();
-  await prisma.faqTema.deleteMany();
 
   const temas = [
     {

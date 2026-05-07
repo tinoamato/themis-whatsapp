@@ -308,9 +308,10 @@ export class BotService {
 
     await this.meta.sendList(
       from,
-      '❓ *Preguntas frecuentes*\n\nElegí el tema sobre el que tenés dudas:',
+      'Elegí el tema sobre el que tenés dudas:',
       [
         {
+          title: '❓ Preguntas frecuentes',
           rows: temas.map((t) => ({
             id: `tema_${t.id}`,
             title: `${t.emoji ?? ''} ${t.titulo}`.trim().slice(0, 24),
@@ -318,7 +319,6 @@ export class BotService {
         },
       ],
       'Ver temas',
-      '❓ Preguntas frecuentes',
     );
     await this.setState(from, 'awaiting_faq_tema', null);
   }
@@ -353,7 +353,7 @@ export class BotService {
         {
           rows: tema.preguntas.map((p, i) => ({
             id: `faq_${p.id}`,
-            title: `${i + 1}. ${p.pregunta.slice(0, 20)}`.slice(0, 24),
+            title: `${i + 1}.`,
             description: p.pregunta.slice(0, 72),
           })),
         },

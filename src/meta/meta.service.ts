@@ -5,6 +5,18 @@ import axios from 'axios';
 export class MetaService {
   private readonly logger = new Logger(MetaService.name);
 
+  // Webhook delivers 549XXXXXXXXX (E.164 with 9) but sandbox allowed list
+  // registers numbers in the old Argentine format 54XX15XXXXXXXX.
+  // This only affects sandbox; production API accepts both formats.
+  private normalizePhone(phone: string): string {
+    if (/^549\d{10}$/.test(phone)) {
+      const area = phone.slice(3, 5);
+      const number = phone.slice(5);
+      return `54${area}15${number}`;
+    }
+    return phone;
+  }
+
   private get baseUrl() {
     return `https://graph.facebook.com/v20.0/${process.env.PHONE_NUMBER_ID}/messages`;
   }
@@ -20,7 +32,7 @@ export class MetaService {
         {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to,
+          to: this.normalizePhone(to),
           type: 'text',
           text: { body: text },
         },
@@ -43,7 +55,7 @@ export class MetaService {
         this.baseUrl,
         {
           messaging_product: 'whatsapp',
-          to,
+          to: this.normalizePhone(to),
           type: 'template',
           template: {
             name: templateName,

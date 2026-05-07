@@ -109,14 +109,6 @@ async function main() {
     },
   ];
 
-  for (const etapa of etapas) {
-    await prisma.etapa.upsert({
-      where: { id: etapa.nombre } as any,
-      create: etapa,
-      update: etapa,
-    });
-  }
-
   if (etapaCount === 0) {
     for (const etapa of etapas) {
       await prisma.etapa.create({ data: etapa });

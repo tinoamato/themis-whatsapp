@@ -12,6 +12,7 @@ import { FaqModule } from './faq/faq.module';
 import { EtapasModule } from './etapas/etapas.module';
 
 @Module({
+  controllers: [],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),

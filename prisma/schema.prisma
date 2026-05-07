@@ -73,6 +73,7 @@ model Reminder {
   esVirtual    Boolean          @default(false)
   linkVirtual  String?
   queLlevar    String?
+  horaEnvio    String           @default("09:00")
   createdAt    DateTime         @default(now())
   alertas      ReminderAlerta[]
 }

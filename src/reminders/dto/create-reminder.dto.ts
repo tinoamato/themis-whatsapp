@@ -47,4 +47,8 @@ export class CreateReminderDto {
   @IsOptional()
   @IsString()
   queLlevar?: string;
+
+  @IsOptional()
+  @IsString()
+  horaEnvio?: string; // HH:MM en hora Argentina, default "09:00"
 }

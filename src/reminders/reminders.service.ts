@@ -27,10 +27,11 @@ export class RemindersService {
         esVirtual: dto.esVirtual ?? false,
         linkVirtual: dto.linkVirtual,
         queLlevar: dto.queLlevar,
+        horaEnvio: dto.horaEnvio ?? '09:00',
         alertas: {
           create: dto.intervalos.map((dias) => ({
             diasAntes: dias,
-            enviarEn: this.calcEnviarEn(fechaEvento, dias),
+            enviarEn: this.calcEnviarEn(fechaEvento, dias, dto.horaEnvio),
           })),
         },
       },
@@ -120,10 +121,11 @@ export class RemindersService {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  private calcEnviarEn(fechaEvento: Date, diasAntes: number): Date {
+  private calcEnviarEn(fechaEvento: Date, diasAntes: number, horaEnvio = '09:00'): Date {
+    const [hh, mm] = horaEnvio.split(':').map(Number);
     const d = new Date(fechaEvento);
     d.setUTCDate(d.getUTCDate() - diasAntes);
-    d.setUTCHours(12, 0, 0, 0); // 9 AM Argentina (UTC-3)
+    d.setUTCHours(hh + 3, mm, 0, 0); // Argentina UTC-3 → UTC
     return d;
   }
 
